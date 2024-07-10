@@ -1,0 +1,338 @@
+Q1: In aggregation what we can do in  $group what cannot in mongodb?
+
+Ans:  the $group stage in an aggregation pipeline is used to group documents by a specified expression and perform operations on the grouped data. The $group stage can perform various aggregations, such as counting, summing, averaging,max , min and more  in eacg group. However, there are certain things that you can do with $group in an aggregation pipeline that you cannot do in a regular MongoDB query.
+
+#Capabilities of $group in Aggregation
+
+Accumulators:
+
+$sum: Calculates the sum of numerical values.
+$avg: Calculates the average of numerical values.
+$min and $max: Finds the minimum and maximum values, respectively.
+$first and $last: Retrieves the first and last documents in each group.
+$push and $addToSet: Adds values to an array (allowing duplicates with $push and ensuring unique values with $addToSet).
+
+Grouping by Expressions:
+
+You can group by any expression, including fields, computed values, or even constants.
+For example, you can group by the result of a date extraction operation like { $year: "$dateField" }.
+Complex Computations:
+
+You can perform complex computations within the $group stage using various expressions and operators.
+For instance, you can calculate the average over a derived value, not just a direct field.
+Nested Objects and Arrays:
+
+You can group by fields within nested objects and arrays using dot notation.
+eg:
+#data: {
+  "_id": 1,
+  "customer": {
+    "id": "C001",
+    "name": "Alice"
+  },
+  "items": [
+    {
+      "productId": "P001",
+      "quantity": 2,
+      "price": 20
+    },
+    {
+      "productId": "P002",
+      "quantity": 1,
+      "price": 50
+    }
+  ],
+  "date": ISODate("2023-01-01T10:00:00Z")
+}
+
+
+#query:  : will study $unwind later
+ db.orders.aggregate([
+  {
+    $unwind: "$items"
+  },
+  {
+    $group: {
+      _id: "$customer.id",
+      totalQuantity: { $sum: "$items.quantity" },
+      totalAmount: { $sum: { $multiply: ["$items.quantity", "$items.price"] } }
+    }
+  }
+]);
+
+
+eg:3 : for $first , $last 
+
+data: db.orders.insertMany([
+  { "_id": 1, "customerId": "C001", "orderDate": ISODate("2023-01-01T10:00:00Z"), "amount": 100 },
+  { "_id": 2, "customerId": "C001", "orderDate": ISODate("2023-02-01T10:00:00Z"), "amount": 200 },
+  { "_id": 3, "customerId": "C002", "orderDate": ISODate("2023-01-15T10:00:00Z"), "amount": 150 },
+  { "_id": 4, "customerId": "C002", "orderDate": ISODate("2023-03-01T10:00:00Z"), "amount": 250 }
+]);
+
+
+query: [
+  {
+    $sort: { "orderDate": 1 } // Sort by orderDate in ascending order
+  },
+  {
+    $group: {
+      _id: "$customerId",
+      firstOrderDate: { $first: "$orderDate" }, //NOte: this is new filed name we are defining in group , in same way we can define in other stages
+      lastOrderDate: { $last: "$orderDate" },
+      firstOrderAmount: { $first: "$amount" },
+      lastOrderAmount: { $last: "$amount" }
+    }
+  }
+]
+
+op: 
+[
+  {
+    "_id": "C002",
+    "firstOrderDate": "2023-01-15T10:00:00Z",
+    "lastOrderDate": "2023-03-01T10:00:00Z",
+    "firstOrderAmount": 150,
+    "lastOrderAmount": 250
+  },
+  {
+    "_id": "C001",
+    "firstOrderDate": "2023-01-01T10:00:00Z",
+    "lastOrderDate": "2023-02-01T10:00:00Z",
+    "firstOrderAmount": 100,
+    "lastOrderAmount": 200
+  }
+]
+
+
+Q:2   when to use "$fieldName" and when not ?
+Ans: "$fieldName" : is used when want the value of referneced filedName then "fieldName" gives value of that filed:
+eg:db.sales.aggregate([
+  {
+    $group: {
+      _id: "$productId",
+      totalAmount: { $sum: "$amount" }
+    }
+  }
+]);
+
+In this example:
+"$productId" references the productId field value.
+"$amount" references the amount field value.
+
+2: Within Expressions and Operators:
+
+Used inside various operators like $match, $project, $group, etc.
+Indicates that the operation should use the value from the specified field.
+Example: Using $match to filter documents:
+db.sales.aggregate([
+  {
+    $match: { amount: { $gt: 100 } }
+  }
+]);
+Here, amount is the field name, and $gt is an operator.
+
+
+
+#Topic_3: $Lookup
+=> it can be used only with aggreagation(). It can be used in any stage in aggregation pipeline.
+
+Eg: query :
+db.orders.aggregate([
+  // Match Stage
+  {
+    $match: {
+      date: { $gte: ISODate("2023-01-01T00:00:00Z") }
+    }
+  },
+  // First Lookup Stage
+  {
+    $lookup: {
+      from: "customers",
+      localField: "customerId",
+      foreignField: "_id",
+      as: "customerDetails"
+    }
+  },
+  // Unwind Stage
+  {
+    $unwind: "$customerDetails"
+  },
+  // Group Stage
+  {
+    $group: {
+      _id: "$customerId",
+      totalSpent: { $sum: "$totalAmount" },
+      customerDetails: { $first: "$customerDetails" }
+    }
+  },
+  // Second Lookup Stage
+  {
+    $lookup: {
+      from: "orders",
+      localField: "_id",
+      foreignField: "customerId",
+      as: "orderHistory"
+    }
+  }
+]);
+
+explanation: Explanation
+$match Stage:
+
+Filters the orders collection to include only documents where the date is greater than or equal to January 1, 2023.
+First $lookup Stage:
+
+Joins the customers collection to add customer details to each order. The matching customer details are stored in the customerDetails array.
+$unwind Stage:
+
+Deconstructs the customerDetails array to output a document for each element. Since the array is expected to have one element, this effectively merges the customer details into the order document.
+$group Stage:
+
+Groups the documents by customerId.
+Sums the totalAmount field to get the total amount spent by each customer.
+Uses $first to include the customer details in the grouped output.
+Second $lookup Stage:
+
+Performs a left outer join with the orders collection to add the order history for each customer. The matching orders are stored in the orderHistory array.
+
+
+
+################################################################################################################################
+4: Topic:4 : handling Arrays in Aggregation
+=> When document has array and we have to do some opreation using data in array then we have to first split the array : It can be done using various ways .they are: 
+ # $unwind 
+ => Eg: 
+ Input dataset: 
+
+ [
+  {
+    "_id": "1",
+    "name": "Alice",
+    "grades": [
+      { "subject": "Math", "score": 85 },
+      { "subject": "English", "score": 92 },
+      { "subject": "History", "score": 78 }
+    ]
+  },
+  {
+    "_id": "2",
+    "name": "Bob",
+    "grades": [
+      { "subject": "Math", "score": 89 },
+      { "subject": "English", "score": 76 },
+      { "subject": "History", "score": 95 }
+    ]
+  },
+  {
+    "_id": "3",
+    "name": "Charlie",
+    "grades": [
+      { "subject": "Math", "score": 92 },
+      { "subject": "English", "score": 88 },
+      { "subject": "History", "score": 84 }
+    ]
+  }
+] 
+
+
+=>Here is an aggregation pipeline that uses $unwind to deconstruct the grades array and calculate the average score for each subject.
+
+code : db.students.aggregate([
+  // Unwind Stage
+  {
+    $unwind: "$grades"
+  },
+  // Group Stage
+  {
+    $group: {
+      _id: "$grades.subject",
+      averageScore: { $avg: "$grades.score" }
+    }
+  }
+]);
+
+#Explanation
+
+$unwind Stage:
+=>Deconstructs the grades array, outputting a document for each grade in the array. This means each student document will be split into multiple documents, one for each grade.
+//op: after unwind stage:
+
+[
+  { "_id": "1", "name": "Alice", "grades": { "subject": "Math", "score": 85 } },
+  { "_id": "1", "name": "Alice", "grades": { "subject": "English", "score": 92 } },
+  { "_id": "1", "name": "Alice", "grades": { "subject": "History", "score": 78 } },
+  { "_id": "2", "name": "Bob", "grades": { "subject": "Math", "score": 89 } },
+  { "_id": "2", "name": "Bob", "grades": { "subject": "English", "score": 76 } },
+  { "_id": "2", "name": "Bob", "grades": { "subject": "History", "score": 95 } },
+  { "_id": "3", "name": "Charlie", "grades": { "subject": "Math", "score": 92 } },
+  { "_id": "3", "name": "Charlie", "grades": { "subject": "English", "score": 88 } },
+  { "_id": "3", "name": "Charlie", "grades": { "subject": "History", "score": 84 } }
+]
+
+
+$group Stage:
+=>Groups the documents by the subject field in the grades array.  This makes  three gropus with _id:Math , _id:English , _id:History .  In each group there are 3 docs. so {$sum:1} gives count of items in group .Or do average of these docs in group . as done below.
+
+Calculates the average score for each subject using { $avg: "$grades.score" }.
+
+#Result
+=>The result of the aggregation pipeline will be a document for each subject with the average score:
+op:
+[
+  { "_id": "Math", "averageScore": 88.66666666666667 },
+  { "_id": "English", "averageScore": 85.33333333333333 },
+  { "_id": "History", "averageScore": 85.66666666666667 }
+]
+
+
+
+Q.  Query2: 
+[
+  {
+    $unwind: "$grades"
+  },
+  {
+    $group: {
+      _id:"$name",
+      avgGrades: {
+        $avg:"$grades.score"
+      }
+    }
+	},
+  {
+    $group: {
+      _id: null,
+      totalDocs:{$sum:1}
+    }
+  }
+]
+
+
+Ans:
+Op: after 2nd stage: 
+[
+  {
+    "_id": "Alice", // its is id of group which has 3 docs and now treated as simgle document.
+    "avgGrades": 85
+  },
+  {
+    "_id": "Bob",
+    "avgGrades": 86.66666666666667
+  },
+  {
+    "_id": "Charlie",
+    "avgGrades": 88
+  }
+]
+
+
+
+op: 3rd stage: it groups all documents (i.e three groups which got  from 2nd stage) into single . since  group by {_id: null}  always make single group with documents .   and gives docs in  this group which is 3 .
+
+ after 3rd stage:  OP:
+  
+  {
+    _id:null,
+    totalDocs:3
+  }
