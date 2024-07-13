@@ -4,7 +4,7 @@ Ans:  the $group stage in an aggregation pipeline is used to group documents by 
 
 #Capabilities of $group in Aggregation
 
-Accumulators:
+#Accumulators:   These  accumulators are applied on group only so if not needed to group by field then we group by {_id:null} and apply $min , $max and other Accumulator shown below.
 
 $sum: Calculates the sum of numerical values.
 $avg: Calculates the average of numerical values.
@@ -12,7 +12,7 @@ $min and $max: Finds the minimum and maximum values, respectively.
 $first and $last: Retrieves the first and last documents in each group.
 $push and $addToSet: Adds values to an array (allowing duplicates with $push and ensuring unique values with $addToSet).
 
-Grouping by Expressions:
+#Grouping by Expressions:
 
 You can group by any expression, including fields, computed values, or even constants.
 For example, you can group by the result of a date extraction operation like { $year: "$dateField" }.
@@ -22,6 +22,99 @@ You can perform complex computations within the $group stage using various expre
 For instance, you can calculate the average over a derived value, not just a direct field.
 Nested Objects and Arrays:
 
+#different ways to use $group:
+
+=>dataset: [
+  { "_id": 1, "product": "A", "price": 10, "quantity": 2, "date": "2023-07-01" },
+  { "_id": 2, "product": "B", "price": 20, "quantity": 1, "date": "2023-07-01" },
+  { "_id": 3, "product": "A", "price": 10, "quantity": 5, "date": "2023-07-02" },
+  { "_id": 4, "product": "C", "price": 30, "quantity": 3, "date": "2023-07-03" },
+  { "_id": 5, "product": "B", "price": 20, "quantity": 4, "date": "2023-07-03" }
+]
+
+1.Group by filed
+=>db.sales.aggregate([
+  {
+    $group: {
+      _id: "$product",
+      totalQuantity: { $sum: "$quantity" }
+    }
+  }
+]);
+
+2.Group by a Computed Value:
+=>Group by the day of the week (computed from the date field) to get total sales for each day of the week: day will be 1 to 7  from sunday to saturday.
+
+code :
+
+//just study the way its using , donot evalutae this : its right but day coming is confusingg
+db.sales.aggregate([
+  {
+    $group: {
+      _id: { $dayOfWeek: { $dateFromString: { dateString: "$date" } } },
+      totalSales: { $sum: { $multiply: ["$price", "$quantity"] } }
+    }
+  }
+]);
+
+3.Group by a Constant:
+=>Group all documents together and compute the total sales across all documents:
+=>CODE:
+ db.sales.aggregate([
+  {
+    $group: {
+      _id: null,
+      totalSales: { $sum: { $multiply: ["$price", "$quantity"] } }
+    }
+  }
+]);
+
+//op: 
+{
+_id:null,
+totalSales:260
+}
+
+
+
+4. Group by Multiple Fields:
+=>Group by product and date to get the total quantity sold for each product on each date:
+=>CODE: 
+db.sales.aggregate([
+  {
+    $group: {
+      _id: { product: "$product", date: "$date" },
+      totalQuantity: { $sum: "$quantity" }
+    }
+  }
+]);
+
+5.Group by a Nested Field:
+Suppose the documents have a nested details field:
+=>CODE: 
+db.sales.aggregate([
+  {
+    $group: {
+      _id: "$details.product",
+      totalQuantity: { $sum: "$quantity" }
+    }
+  }
+]);
+
+6. Group by an Expression:
+=>Group by a custom expression, such as products with a price greater than 15 or not:
+CODE: 
+db.sales.aggregate([
+  {
+    $group: {
+      _id: { $cond: { if: { $gt: ["$price", 15] }, then: "expensive", else: "cheap" } },
+      totalQuantity: { $sum: "$quantity" }
+    }
+  }
+]);
+
+
+# VVVVI: SOME OTHER BUT VVI QUERY ABOUT GROUP , SORT AND OTHERS :
 You can group by fields within nested objects and arrays using dot notation.
 eg:
 #data: {
@@ -46,7 +139,7 @@ eg:
 }
 
 
-#query:  : will study $unwind later
+#query: 
  db.orders.aggregate([
   {
     $unwind: "$items"
@@ -78,7 +171,7 @@ query: [
   {
     $group: {
       _id: "$customerId",
-      firstOrderDate: { $first: "$orderDate" }, //NOte: this is new filed name we are defining in group , in same way we can define in other stages
+      firstOrderDate: { $first: "$orderDate" }, //NOte: this is new filed name we are defining in group , in same way we can defined in other stages
       lastOrderDate: { $last: "$orderDate" },
       firstOrderAmount: { $first: "$amount" },
       lastOrderAmount: { $last: "$amount" }
@@ -140,11 +233,11 @@ Here, amount is the field name, and $gt is an operator.
 Eg: query :
 db.orders.aggregate([
   // Match Stage
-  {
+  <!-- {
     $match: {
-      date: { $gte: ISODate("2023-01-01T00:00:00Z") }
+      date: { $gte: ISODate("2023-01-01T00:00:00Z") }   // for now ignore match stage , since in dataset date filed is missing , but just understand that can apply looUp at any stage
     }
-  },
+  }, -->
   // First Lookup Stage
   {
     $lookup: {
@@ -177,6 +270,8 @@ db.orders.aggregate([
   }
 ]);
 
+
+ 
 explanation: Explanation
 $match Stage:
 
@@ -195,6 +290,95 @@ Uses $first to include the customer details in the grouped output.
 Second $lookup Stage:
 
 Performs a left outer join with the orders collection to add the order history for each customer. The matching orders are stored in the orderHistory array.
+
+Explanation with dataset:
+
+1.customers :   dataset
+=> [
+  { "_id": 101, "name": "Alice", "email": "alice@example.com" },
+  { "_id": 102, "name": "Bob", "email": "bob@example.com" },
+  { "_id": 103, "name": "Charlie", "email": "charlie@example.com" }
+]
+
+2.orders : dataset
+=>
+[
+  { "_id": 101, "name": "Alice", "email": "alice@example.com" },
+  { "_id": 102, "name": "Bob", "email": "bob@example.com" },
+  { "_id": 103, "name": "Charlie", "email": "charlie@example.com" }
+]
+
+Query explanation: 
+1. $lookup Stage
+This stage performs a left outer join to the customers collection. It adds a new array field customerDetails to each document, containing the matched documents from the customers collection.
+
+input: [
+  { "_id": 1, "customerId": 101, "totalAmount": 50 },
+  { "_id": 2, "customerId": 102, "totalAmount": 150 },
+  { "_id": 3, "customerId": 101, "totalAmount": 100 },
+  { "_id": 4, "customerId": 103, "totalAmount": 200 }
+]
+
+Output:[
+  { "_id": 1, "customerId": 101, "totalAmount": 50, "customerDetails": [{ "_id": 101, "name": "Alice", "email": "alice@example.com" }] },
+  { "_id": 2, "customerId": 102, "totalAmount": 150, "customerDetails": [{ "_id": 102, "name": "Bob", "email": "bob@example.com" }] },
+  { "_id": 3, "customerId": 101, "totalAmount": 100, "customerDetails": [{ "_id": 101, "name": "Alice", "email": "alice@example.com" }] },
+  { "_id": 4, "customerId": 103, "totalAmount": 200, "customerDetails": [{ "_id": 103, "name": "Charlie", "email": "charlie@example.com" }] }
+]
+
+2. $unwind Stage
+This stage deconstructs the customerDetails array field from the input documents to output a document for each element of the array. Since customerDetails arrays have only one element, this essentially flattens the array.
+
+Output: [
+  { "_id": 1, "customerId": 101, "totalAmount": 50, "customerDetails": { "_id": 101, "name": "Alice", "email": "alice@example.com" } },
+  { "_id": 2, "customerId": 102, "totalAmount": 150, "customerDetails": { "_id": 102, "name": "Bob", "email": "bob@example.com" } },
+  { "_id": 3, "customerId": 101, "totalAmount": 100, "customerDetails": { "_id": 101, "name": "Alice", "email": "alice@example.com" } },
+  { "_id": 4, "customerId": 103, "totalAmount": 200, "customerDetails": { "_id": 103, "name": "Charlie", "email": "charlie@example.com" } }
+]
+
+3. "$group" Stage
+This stage groups documents by customerId, calculates the total amount spent by each customer, and retains the first occurrence of customerDetails for each group.
+
+Output:
+[
+  { "_id": 101, "totalSpent": 150, "customerDetails": { "_id": 101, "name": "Alice", "email": "alice@example.com" } },
+  { "_id": 102, "totalSpent": 150, "customerDetails": { "_id": 102, "name": "Bob", "email": "bob@example.com" } },
+  { "_id": 103, "totalSpent": 200, "customerDetails": { "_id": 103, "name": "Charlie", "email": "charlie@example.com" } }
+]
+
+4. Second "$lookup" Stage
+This stage performs another left outer join, this time with the orders collection. It adds a new array field orderHistory to each document, containing the matched documents from the orders collection based on customerId.
+
+Output:[
+  {
+    "_id": 101,
+    "totalSpent": 150,
+    "customerDetails": { "_id": 101, "name": "Alice", "email": "alice@example.com" },
+    "orderHistory": [
+      { "_id": 1, "customerId": 101, "orderDate": "2023-07-01" },
+      { "_id": 3, "customerId": 101, "orderDate": "2023-07-03" }
+    ]
+  },
+  {
+    "_id": 102,
+    "totalSpent": 150,
+    "customerDetails": { "_id": 102, "name": "Bob", "email": "bob@example.com" },
+    "orderHistory": [
+      { "_id": 2, "customerId": 102, "orderDate": "2023-07-02" }
+    ]
+  },
+  {
+    "_id": 103,
+    "totalSpent": 200,
+    "customerDetails": { "_id": 103, "name": "Charlie", "email": "charlie@example.com" },
+    "orderHistory": [
+      { "_id": 4, "customerId": 103, "orderDate": "2023-07-04" }
+    ]
+  }
+]
+
+
+
 
 
 
@@ -272,7 +456,7 @@ $unwind Stage:
 
 
 $group Stage:
-=>Groups the documents by the subject field in the grades array.  This makes  three gropus with _id:Math , _id:English , _id:History .  In each group there are 3 docs. so {$sum:1} gives count of items in group .Or do average of these docs in group . as done below.
+=>Groups the documents by the subject field value in the grades array.  This makes  three gropus with _id:Math , _id:English , _id:History .  In each group there are 3 docs. so {$sum:1} gives count of items in group .Or do average of these docs in group . as done below.
 
 Calculates the average score for each subject using { $avg: "$grades.score" }.
 
@@ -331,8 +515,10 @@ Op: after 2nd stage:
 op: 3rd stage: it groups all documents (i.e three groups which got  from 2nd stage) into single . since  group by {_id: null}  always make single group with documents .   and gives docs in  this group which is 3 .
 
  after 3rd stage:  OP:
-  
+
   {
     _id:null,
     totalDocs:3
   }
+
+
