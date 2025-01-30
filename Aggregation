@@ -76,7 +76,6 @@ totalSales:260
 }
 
 
-
 4. Group by Multiple Fields:
 =>Group by product and date to get the total quantity sold for each product on each date:
 =>CODE: 
@@ -522,3 +521,37 @@ op: 3rd stage: it groups all documents (i.e three groups which got  from 2nd sta
   }
 
 
+
+###  use of $expr in $lookup:
+=> 
+  ## Q. When to Use $expr vs. localField/foreignField?
+=> Scenario	Use $expr	Use localField/foreignField
+Simple field matching	:  use localField/foreignField ✅
+Comparing fields with conditions ($eq, $gt, etc.):	Use $expr✅	
+Filtering based on additional conditions	:	Use $expr✅
+Multiple conditions ($and, $or)	:	Use $expr✅
+If you just need a direct match, localField/foreignField is simpler and faster. Use $expr when you need complex conditions. 🚀
+
+
+ ## pipeline in $lookup 
+=> In MongoDB's $lookup stage, the pipeline operator (let and pipeline) allows more complex lookups by enabling filtering, transformations, 
+and computations on the foreign collection. This is an enhancement over the basic $lookup, which only performs a simple left join.
+
+  # Syntax of $lookup with Pipeline:
+  code: 
+  {
+  $lookup: {
+    from: "foreignCollection",
+    let: { localVar: "$localField" },
+    pipeline: [
+      { $match: { $expr: { $eq: ["$foreignField", "$$localVar"] } } },
+      { $project: { field1: 1, field2: 1 } }
+    ],
+    as: "outputArray"
+  }
+}
+
+
+# Note: after lookUp the doc comes in array since for single foreign field there can be multiple docs in aother collection .
+ So if you are sure that there there will be single matching doc in forign collection for local filed then can use $unwind 
+ stage after $lookup to get data in object in place of array of objects for sing;e value also.
