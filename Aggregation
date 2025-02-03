@@ -380,7 +380,7 @@ Output:[
 
 
 
-
+#   hello
 ################################################################################################################################
 4: Topic:4 : handling Arrays in Aggregation
 => When document has array and we have to do some opreation using data in array then we have to first split the array : It can be done using various ways .they are: 
